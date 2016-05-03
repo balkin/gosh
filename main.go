@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"log"
 	"fmt"
+	"bytes"
 )
 
 func Index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -42,15 +43,48 @@ func Link(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 
 var LastKey = 0
 
+var ShortChars = []byte{'-',
+	'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+	'k', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u',
+	'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E',
+	'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q',
+	'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0',
+	'1', '2', '3', '4', '5', '6', '7', '8', '9',
+}
+var MaxChars = len(ShortChars) - 1
+
+func ShortToNumeric(str string) int {
+	v, m := 0, 1
+	for i := len(str) - 1; i >= 0; i-- {
+		p := bytes.IndexByte(ShortChars, str[i])
+		v += p * m
+		m *= MaxChars
+		log.Printf("i=%d, char=%c, p=%d, mc=%d", i, str[i], p, MaxChars)
+	}
+	return v
+}
+
+func NumericToShort(i int) string {
+	if i < MaxChars {
+		return string(ShortChars[i])
+	}
+	s := ""
+	for i > MaxChars {
+		r := i % MaxChars
+		i = (i - r) / MaxChars
+		s = string(ShortChars[r]) + s
+	}
+	return string(ShortChars[i]) + s
+}
+
 func main() {
 	log.Println("Starting GOSH")
-	db, err := leveldb.OpenFile("path/to/db", nil)
+	db, err := leveldb.OpenFile("leveldb", nil)
+	defer db.Close()
 	iter := db.NewIterator(nil, nil)
 	iter.Last()
-	key := iter.Key()
-	log.Println("Last index: ", key)
-	defer iter.Release()
-	defer db.Close()
+	LastKey = ShortToNumeric(string(iter.Key()))
+	iter.Release()
 	router := httprouter.New()
 	router.GET("/", Index)
 	router.POST("/short.go", Shorten)
