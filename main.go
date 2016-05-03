@@ -7,7 +7,12 @@ import (
 	"log"
 	"fmt"
 	"bytes"
+	"encoding/json"
 )
+
+type url_struct struct {
+	Url string
+}
 
 func Index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	fmt.Fprintln(w, `<!DOCTYPE html>
@@ -35,19 +40,45 @@ func Shorten(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 
 func Expand(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	link := params.ByName("link")
-	log.Printf("Link: %s", link)
+	data, err := DB.Get([]byte (link), nil)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	us := url_struct{Url:string(data)}
+	json.NewEncoder(w).Encode(us)
+	url := string(data)
+	log.Printf("Redirection: %s to %s", link, url)
+	http.Redirect(w, r, url, 302)
+}
+
+func JsonLink(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	link := params.ByName("link")
 	data, err := DB.Get([]byte (link), nil)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	url := string(data)
-	log.Printf("Redirection: %s to %s", link, url)
-	http.Redirect(w, r, url, 302)
+	fmt.Fprintf(w, `{"url": "%s"}`, url)
 }
 
-func Link(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	fmt.Println(w, "SHORT")
+func PutLink(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	link := params.ByName("link")
+	decoder := json.NewDecoder(r.Body)
+	var us url_struct
+	err := decoder.Decode(&us)
+	if err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	err = DB.Put([]byte(link), []byte(us.Url), nil)
+	log.Printf("Link: %s to %s", link, us.Url)
+	if err != nil {
+		http.Error(w, "DB Error", http.StatusBadGateway)
+		return
+	}
+	fmt.Fprintln(w, `{"ok": "true"}`)
 }
 
 var LastKey int = 0
@@ -102,8 +133,9 @@ func main() {
 	router := httprouter.New()
 	router.GET("/", Index)
 	router.POST("/short.go", Shorten)
-	router.PUT("/:link", Link)
+	router.PUT("/:link", PutLink)
 	router.GET("/:link", Expand)
+	router.GET("/:link/json", JsonLink)
 	err = http.ListenAndServe(":9000", router)
 	if err != nil {
 		log.Fatal("Error: ", err)
