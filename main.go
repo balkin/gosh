@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"bytes"
 	"encoding/json"
+	"math"
 )
 
 type url_struct struct {
@@ -35,7 +36,31 @@ func Index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 }
 
 func Shorten(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	fmt.Println(w, "SHORT")
+	var url string
+	url = r.FormValue("url")
+	if url == "" {
+		url = r.URL.Query().Get("url")
+	}
+	if url == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	var link string
+	for LastKey < math.MaxInt32 {
+		LastKey++
+		link = NumericToShort(LastKey)
+		exists, err := DB.Has([]byte(link), nil)
+		if !exists && err == nil {
+			break
+		}
+	}
+	err := DB.Put([]byte(link), []byte(url), nil)
+	log.Printf("Link: %d, %s to %s", LastKey, link, url)
+	if err != nil {
+		http.Error(w, "DB Error", http.StatusBadGateway)
+		return
+	}
+	fmt.Fprintln(w, "OK")
 }
 
 func Expand(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
