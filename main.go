@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/julienschmidt/httprouter"
+	"github.com/syndtr/goleveldb/leveldb"
 	"net/http"
 	"log"
 	"fmt"
@@ -39,13 +40,22 @@ func Link(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	fmt.Println(w, "SHORT")
 }
 
+var LastKey = 0
+
 func main() {
 	log.Println("Starting GOSH")
+	db, err := leveldb.OpenFile("path/to/db", nil)
+	iter := db.NewIterator(nil, nil)
+	iter.Last()
+	key := iter.Key()
+	log.Println("Last index: ", key)
+	defer iter.Release()
+	defer db.Close()
 	router := httprouter.New()
 	router.GET("/", Index)
 	router.POST("/short.go", Shorten)
 	router.PUT("/:link", Link)
 	router.GET("/:link", Expand)
-	err := http.ListenAndServe(":9000", router)
+	err = http.ListenAndServe(":9000", router)
 	log.Fatal("Error: ", err)
 }
