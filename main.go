@@ -34,14 +34,24 @@ func Shorten(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 }
 
 func Expand(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	http.Redirect(w, r, "http://baron.su/", 302)
+	link := params.ByName("link")
+	log.Printf("Link: %s", link)
+	data, err := DB.Get([]byte (link), nil)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	url := string(data)
+	log.Printf("Redirection: %s to %s", link, url)
+	http.Redirect(w, r, url, 302)
 }
 
 func Link(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	fmt.Println(w, "SHORT")
 }
 
-var LastKey = 0
+var LastKey int = 0
+var DB *leveldb.DB = nil
 
 var ShortChars = []byte{'-',
 	'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
@@ -59,7 +69,6 @@ func ShortToNumeric(str string) int {
 		p := bytes.IndexByte(ShortChars, str[i])
 		v += p * m
 		m *= MaxChars
-		log.Printf("i=%d, char=%c, p=%d, mc=%d", i, str[i], p, MaxChars)
 	}
 	return v
 }
@@ -80,6 +89,11 @@ func NumericToShort(i int) string {
 func main() {
 	log.Println("Starting GOSH")
 	db, err := leveldb.OpenFile("leveldb", nil)
+	if err != nil {
+		log.Fatal("Error: ", err)
+		return
+	}
+	DB = db
 	defer db.Close()
 	iter := db.NewIterator(nil, nil)
 	iter.Last()
@@ -91,5 +105,7 @@ func main() {
 	router.PUT("/:link", Link)
 	router.GET("/:link", Expand)
 	err = http.ListenAndServe(":9000", router)
-	log.Fatal("Error: ", err)
+	if err != nil {
+		log.Fatal("Error: ", err)
+	}
 }
